@@ -374,3 +374,22 @@ export function createFragment(
   cb(fragment as any);
   return fragment;
 }
+
+export let requestUrlMock:
+  | ((request: any) => Promise<{ status: number; text: string }>)
+  | null = null;
+
+export function setRequestUrlMock(
+  fn: ((request: any) => Promise<{ status: number; text: string }>) | null,
+) {
+  requestUrlMock = fn;
+}
+
+export async function requestUrl(
+  request: any,
+): Promise<{ status: number; text: string }> {
+  if (requestUrlMock) {
+    return requestUrlMock(request);
+  }
+  return { status: 200, text: "" };
+}

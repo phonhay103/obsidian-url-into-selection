@@ -45,6 +45,7 @@ export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
           1: "Auto Select",
           2: "Insert [](url)",
           3: "Insert <url>",
+          4: "Insert [title](url)",
         };
 
         dropdown

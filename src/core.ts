@@ -4,6 +4,7 @@ import { Editor, EditorPosition, EditorRange } from "obsidian";
 import { isUrl, processUrl, isImgEmbed, isWikilink } from "./utils/url";
 import { checkIfInMarkdownLink } from "./utils/markdown";
 import { stripSurroundingQuotes } from "./utils/quotes";
+import { fetchTitle } from "./utils/title";
 
 /**
  * @param editor Obsidian Editor Instance
@@ -14,7 +15,7 @@ export default function UrlIntoSelection(
   editor: Editor,
   cbString: string,
   settings: PluginSettings,
-): void;
+): void | Promise<void>;
 /**
  * @param editor Obsidian Editor Instance
  * @param cbEvent clipboard event
@@ -24,12 +25,12 @@ export default function UrlIntoSelection(
   editor: Editor,
   cbEvent: ClipboardEvent,
   settings: PluginSettings,
-): void;
+): void | Promise<void>;
 export default function UrlIntoSelection(
   editor: Editor,
   cb: string | ClipboardEvent,
   settings: PluginSettings,
-): void {
+): void | Promise<void> {
   // skip all if nothing should be done
   if (
     !editor.somethingSelected() &&
@@ -51,6 +52,14 @@ export default function UrlIntoSelection(
     to: editor.getCursor(),
   };
   const isInMarkdownLink = checkIfInMarkdownLink(editor, cursorOrRange);
+
+  const clipboardIsUrl = isUrl(clipboardText.trim(), settings);
+  const selectedIsUrl = isUrl(selectedText.trim(), settings);
+
+  if (!clipboardIsUrl && !selectedIsUrl) return;
+
+  if (typeof cb !== "string") cb.preventDefault(); // prevent default paste behavior
+
   const replaceText = getReplaceText(
     clipboardText,
     selectedText,
@@ -59,11 +68,9 @@ export default function UrlIntoSelection(
   );
   if (replaceText === null) return;
 
-  // apply changes
-  if (typeof cb !== "string") cb.preventDefault(); // prevent default paste behavior
+  // apply changes immediately
   replace(editor, replaceText, replaceRange);
 
-  // if nothing is selected and the nothing selected behavior is to insert [](url) place the cursor between the square brackets
   if (
     selectedText === "" &&
     settings.nothingSelected === NothingSelected.insertInline
@@ -71,6 +78,47 @@ export default function UrlIntoSelection(
     editor.setCursor({
       ch: replaceRange.from.ch + 1,
       line: replaceRange.from.line,
+    });
+  }
+
+  // If in insertTitle mode and nothing was selected, fetch title asynchronously and replace
+  if (
+    selectedText === "" &&
+    settings.nothingSelected === NothingSelected.insertTitle &&
+    clipboardIsUrl
+  ) {
+    const rawUrl = clipboardText.trim();
+    const processedUrl = processUrl(rawUrl);
+    const imgEmbedMark = isImgEmbed(rawUrl, settings) ? "!" : "";
+    const initialText = replaceText;
+    const effectiveReplaceRange = replaceRange || {
+      from: editor.getCursor(),
+      to: editor.getCursor(),
+    };
+
+    return fetchTitle(processedUrl).then((title) => {
+      if (!title || title === processedUrl) return;
+      const newText = imgEmbedMark + `[${title}](${processedUrl})`;
+
+      const line = effectiveReplaceRange.from.line;
+      const startCh = effectiveReplaceRange.from.ch;
+      const endCh = startCh + initialText.length;
+
+      let actualFrom = { line, ch: startCh };
+      let actualTo = { line, ch: endCh };
+
+      if (editor.getRange(actualFrom, actualTo) !== initialText) {
+        const currentLineText = editor.getLine(line);
+        const idx = currentLineText.indexOf(initialText);
+        if (idx !== -1) {
+          actualFrom = { line, ch: idx };
+          actualTo = { line, ch: idx + initialText.length };
+        } else {
+          return;
+        }
+      }
+
+      editor.replaceRange(newText, actualFrom, actualTo);
     });
   }
 }
@@ -90,6 +138,7 @@ function getSelnRange(editor: Editor, settings: PluginSettings) {
         break;
       case NothingSelected.insertInline:
       case NothingSelected.insertBare:
+      case NothingSelected.insertTitle:
         replaceRange = getCursor(editor);
         selectedText = "";
         break;
@@ -160,6 +209,11 @@ function getReplaceText(
     settings.nothingSelected === NothingSelected.insertBare
   ) {
     return /^<.*>$/.test(url) ? url : `<${url}>`;
+  } else if (
+    selectedText === "" &&
+    settings.nothingSelected === NothingSelected.insertTitle
+  ) {
+    return imgEmbedMark + `[${url}](${url})`;
   } else {
     return imgEmbedMark + `[${linktext}](${url})`;
   }

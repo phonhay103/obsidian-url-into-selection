@@ -7,6 +7,9 @@ export const enum NothingSelected {
   insertInline,
   /** Insert `<url>` */
   insertBare,
+
+  /** Insert `[title](url)` by fetching title */
+  insertTitle,
 }
 
 export interface PluginSettings {

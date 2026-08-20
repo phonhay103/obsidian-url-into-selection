@@ -23,7 +23,7 @@ export default class UrlIntoSel_Plugin extends Plugin {
       name: "",
       editorCallback: async (editor: Editor) => {
         const clipboardText = await navigator.clipboard.readText();
-        UrlIntoSelection(editor, clipboardText, this.settings);
+        await UrlIntoSelection(editor, clipboardText, this.settings);
       },
     });
 

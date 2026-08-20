@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { Editor } from "./test/obsidian-mock";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { Editor, setRequestUrlMock } from "./test/obsidian-mock";
 import UrlIntoSelection from "./core";
 import { NothingSelected, PluginSettings } from "./types";
 import { DEFAULT_SETTINGS } from "./test/test-settings";
@@ -416,6 +416,52 @@ describe("NothingSelected Behaviors", () => {
 
       UrlIntoSelection(editor, "https://example.com", settings);
       expect(editor.getValue()).toBe("<https://example.com>");
+    });
+  });
+
+
+  describe("insertTitle mode", () => {
+    beforeEach(() => {
+      setRequestUrlMock(null);
+    });
+
+    afterEach(() => {
+      setRequestUrlMock(null);
+    });
+
+    it("should fetch title and create [title](url) format when nothing is selected", async () => {
+      setRequestUrlMock(async (req) => {
+        return {
+          status: 200,
+          text: "<html><head><title>My Web Page</title></head></html>",
+        };
+      });
+
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        nothingSelected: NothingSelected.insertTitle,
+      };
+      editor = new Editor("", { line: 0, ch: 0 });
+
+      await UrlIntoSelection(editor, "https://example.com", settings);
+      expect(editor.getValue()).toBe("[My Web Page](https://example.com)");
+    });
+
+    it("should fallback to url as title when title fetch fails", async () => {
+      setRequestUrlMock(async () => {
+        throw new Error("Network error");
+      });
+
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        nothingSelected: NothingSelected.insertTitle,
+      };
+      editor = new Editor("", { line: 0, ch: 0 });
+
+      await UrlIntoSelection(editor, "https://example.com", settings);
+      expect(editor.getValue()).toBe(
+        "[https://example.com](https://example.com)",
+      );
     });
   });
 });
