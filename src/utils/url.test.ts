@@ -8,6 +8,7 @@ import {
   isAlreadyWrapped,
   processUrl,
   isImgEmbed,
+  getUrlExtension,
 } from "./url";
 import { DEFAULT_SETTINGS } from "../test/test-settings";
 
@@ -311,9 +312,32 @@ describe("URL Utilities", () => {
       expect(isImgEmbed("https://vimeo.com/123", settings)).toBe(false);
     });
 
-    it("should handle empty settings", () => {
+    it("should match default image extensions (like .webp) even with empty listForImgEmbed", () => {
       const settings = { ...DEFAULT_SETTINGS, listForImgEmbed: "" };
-      expect(isImgEmbed("https://example.com/photo.jpg", settings)).toBe(false);
+      expect(isImgEmbed("https://example.com/photo.jpg", settings)).toBe(true);
+      expect(isImgEmbed("https://example.com/image.webp", settings)).toBe(true);
+      expect(isImgEmbed("https://example.com/image.webp?width=500", settings)).toBe(true);
+      expect(isImgEmbed("https://example.com/graphic.svg", settings)).toBe(true);
+      expect(isImgEmbed("https://example.com/page.html", settings)).toBe(false);
     });
-  });
+
+
+    it("should allow custom imageExtensions list and ignore-case matching", () => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        imageExtensions: "png, webp"
+      };
+      expect(isImgEmbed("https://example.com/photo.jpg", settings)).toBe(false);
+      expect(isImgEmbed("https://example.com/photo.PNG", settings)).toBe(true);
+      expect(isImgEmbed("https://example.com/image.webp", settings)).toBe(true);
+    });
+
+    it("should extract file extension correctly with getUrlExtension", () => {
+      expect(getUrlExtension("https://example.com/photo.jpg?width=500")).toBe("jpg");
+      expect(getUrlExtension("example.com/image.WEBP#top")).toBe("webp");
+      expect(getUrlExtension("https://example.com/path/no-extension")).toBe(null);
+      expect(getUrlExtension("https://example.com/about.png.html")).toBe("html");
+    });
+});
+
 });

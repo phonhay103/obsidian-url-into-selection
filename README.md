@@ -12,6 +12,17 @@ Also works the other way around, inserts text into a selected link (URL) by comm
 
 Custom plugins are only available for Obsidian v0.9.8+.
 
+## Settings
+
+- **Image Extensions**: Provide a comma-separated list of image extensions (e.g. `webp,png,jpg,jpeg,gif`). When pasting a matching image URL, it will be automatically inserted as an image embed (`![](url)`).
+- **When nothing is selected**:
+  - **Do nothing**: The URL is simply pasted as normal text.
+  - **Smart insert**: When pasting a normal URL, the plugin will fetch the webpage title and automatically insert a Markdown link (`[title](url)`). If the URL is an image, it will format it as an image embed (`![](url)`).
+
+## Paste as Plain Text
+
+If you want to paste a URL as plain text without triggering the plugin's formatting, simply use Obsidian's default **Paste as plain text** shortcut (`Ctrl/Cmd + Shift + V`). The plugin detects the `Shift` key and will bypass formatting automatically.
+
 # Installation
 
 In order to install this plugin, go to "Settings > Third Party Plugins > Paste URL into selection".

@@ -14,7 +14,7 @@ describe("URL into Selection - Markdown Link Context", () => {
   beforeEach(() => {
     settings = {
       ...DEFAULT_SETTINGS,
-      nothingSelected: NothingSelected.insertBare,
+      nothingSelected: NothingSelected.insertTitle,
     };
   });
 
@@ -70,7 +70,7 @@ describe("URL into Selection - Markdown Link Context", () => {
   });
 
   describe("when pasting URL outside markdown link context", () => {
-    it("should wrap URL with angle brackets when cursor is on empty line", () => {
+    it("should insert link with insertTitle when cursor is on empty line", () => {
       // Setup: empty editor
       editor = new Editor("", { line: 0, ch: 0 });
       const clipboardText = "https://example.com";
@@ -78,11 +78,11 @@ describe("URL into Selection - Markdown Link Context", () => {
       // Act
       UrlIntoSelection(editor, clipboardText, settings);
 
-      // Assert: URL should be wrapped with angle brackets
-      expect(editor.getValue()).toBe("<https://example.com>");
+      // Assert: URL should be inserted in insertTitle format
+      expect(editor.getValue()).toBe("[https://example.com](https://example.com)");
     });
 
-    it("should wrap URL with angle brackets when cursor is in regular text", () => {
+    it("should insert link with insertTitle when cursor is in regular text", () => {
       // Setup: cursor in middle of regular text
       editor = new Editor("Check this out: ", { line: 0, ch: 16 });
       const clipboardText = "https://example.com";
@@ -90,11 +90,11 @@ describe("URL into Selection - Markdown Link Context", () => {
       // Act
       UrlIntoSelection(editor, clipboardText, settings);
 
-      // Assert: URL should be wrapped with angle brackets
-      expect(editor.getValue()).toBe("Check this out: <https://example.com>");
+      // Assert: URL should be inserted in insertTitle format
+      expect(editor.getValue()).toBe("Check this out: [https://example.com](https://example.com)");
     });
 
-    it("should wrap URL with angle brackets when not inside link parentheses", () => {
+    it("should insert link with insertTitle when not inside link parentheses", () => {
       // Setup: cursor before the link syntax
       editor = new Editor("[Title](url) some text", { line: 0, ch: 0 });
       const clipboardText = "https://example.com";
@@ -102,13 +102,13 @@ describe("URL into Selection - Markdown Link Context", () => {
       // Act
       UrlIntoSelection(editor, clipboardText, settings);
 
-      // Assert: URL should be wrapped with angle brackets
+      // Assert: URL should be inserted in insertTitle format
       expect(editor.getValue()).toBe(
-        "<https://example.com>[Title](url) some text",
+        "[https://example.com](https://example.com)[Title](url) some text",
       );
     });
 
-    it("should wrap URL when cursor is in square brackets of markdown link", () => {
+    it("should insert link with insertTitle when cursor is in square brackets of markdown link", () => {
       // Setup: cursor inside [Title]
       editor = new Editor("[Title]()", { line: 0, ch: 3 });
       const clipboardText = "https://example.com";
@@ -116,8 +116,8 @@ describe("URL into Selection - Markdown Link Context", () => {
       // Act
       UrlIntoSelection(editor, clipboardText, settings);
 
-      // Assert: URL should be wrapped since we're not in the parentheses
-      expect(editor.getValue()).toBe("[Ti<https://example.com>tle]()");
+      // Assert: URL should be inserted in insertTitle format
+      expect(editor.getValue()).toBe("[Ti[https://example.com](https://example.com)tle]()");
     });
   });
 
@@ -318,7 +318,7 @@ describe("DevonThink Links", () => {
   beforeEach(() => {
     settings = {
       ...DEFAULT_SETTINGS,
-      nothingSelected: NothingSelected.insertBare,
+      nothingSelected: NothingSelected.insertTitle,
     };
   });
 
@@ -330,22 +330,11 @@ describe("DevonThink Links", () => {
     expect(editor.getValue()).toBe("[selected text](x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9)");
   });
 
-  it("should create bare link when pasting DevonThink URL with no selection", () => {
+  it("should create link when pasting DevonThink URL with no selection in insertTitle mode", () => {
     editor = new Editor("", { line: 0, ch: 0 });
 
     UrlIntoSelection(editor, "x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9", settings);
-    expect(editor.getValue()).toBe("<x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9>");
-  });
-
-  it("should create inline link format when nothingSelected is insertInline", () => {
-    const inlineSettings = {
-      ...DEFAULT_SETTINGS,
-      nothingSelected: NothingSelected.insertInline,
-    };
-    editor = new Editor("", { line: 0, ch: 0 });
-
-    UrlIntoSelection(editor, "x-devonthink-item://ABC123", inlineSettings);
-    expect(editor.getValue()).toBe("[](x-devonthink-item://ABC123)");
+    expect(editor.getValue()).toBe("[x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9](x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9)");
   });
 });
 
@@ -362,60 +351,6 @@ describe("NothingSelected Behaviors", () => {
 
       UrlIntoSelection(editor, "https://example.com", settings);
       expect(editor.getValue()).toBe("some text"); // No change
-    });
-  });
-
-  describe("autoSelect mode", () => {
-    it("should auto-select word at cursor position", () => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.autoSelect,
-      };
-      editor = new Editor("word here", { line: 0, ch: 2 }); // cursor in 'word'
-
-      UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe("[word](https://example.com) here");
-    });
-
-    it("should auto-select URL at cursor position", () => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.autoSelect,
-      };
-      editor = new Editor("Check https://old.com out", { line: 0, ch: 15 }); // cursor in URL
-
-      UrlIntoSelection(editor, "New Link Text", settings);
-      expect(editor.getValue()).toBe(
-        "Check [New Link Text](https://old.com) out",
-      );
-    });
-
-  });
-
-  describe("insertInline mode", () => {
-    it("should create [](url) format and position cursor between brackets", () => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.insertInline,
-      };
-      editor = new Editor("", { line: 0, ch: 0 });
-
-      UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe("[](https://example.com)");
-      expect(editor.getCursor()).toEqual({ line: 0, ch: 1 }); // Cursor between brackets
-    });
-  });
-
-  describe("insertBare mode", () => {
-    it("should create <url> format", () => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.insertBare,
-      };
-      editor = new Editor("", { line: 0, ch: 0 });
-
-      UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe("<https://example.com>");
     });
   });
 
@@ -462,6 +397,25 @@ describe("NothingSelected Behaviors", () => {
       expect(editor.getValue()).toBe(
         "[https://example.com](https://example.com)",
       );
+    });
+
+
+    it("should format image URLs (like .webp) as ![](url) without fetching title in insertTitle mode", async () => {
+      let fetchCalled = false;
+      setRequestUrlMock(async () => {
+        fetchCalled = true;
+        return { status: 200, text: "<html><head><title>Some Title</title></head></html>" };
+      });
+
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        nothingSelected: NothingSelected.insertTitle,
+      };
+      editor = new Editor("", { line: 0, ch: 0 });
+
+      await UrlIntoSelection(editor, "https://example.com/image.webp", settings);
+      expect(editor.getValue()).toBe("![](https://example.com/image.webp)");
+      expect(fetchCalled).toBe(false);
     });
   });
 });
@@ -806,15 +760,6 @@ describe("Obsidian Wikilink Support", () => {
       expect(editor.getValue()).toBe(
         "[[My Note With Spaces#Section 1|Custom Text]]",
       );
-    });
-
-    it("should insert bare wikilink when no text is selected and setting is insertBare", () => {
-      editor = new Editor("", { line: 0, ch: 0 });
-      settings.nothingSelected = NothingSelected.insertBare;
-      const clipboardText = "[[10. Links#Header1]]";
-
-      UrlIntoSelection(editor, clipboardText, settings);
-      expect(editor.getValue()).toBe("[[10. Links#Header1]]");
     });
   });
 

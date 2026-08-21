@@ -134,9 +134,41 @@ export function processUrl(src: string): string {
 }
 
 /**
+ * Extract file extension from a URL string safely
+ */
+export function getUrlExtension(urlText: string): string | null {
+  try {
+    let formattedUrl = urlText.trim();
+    if (!/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = "http://" + formattedUrl;
+    }
+    const parsed = new URL(formattedUrl);
+    const pathname = parsed.pathname;
+    const lastSegment = pathname.substring(pathname.lastIndexOf('/') + 1);
+    const dotIndex = lastSegment.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      return lastSegment.substring(dotIndex + 1).toLowerCase();
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return null;
+}
+
+/**
  * Check if URL matches image embed patterns
  */
 export function isImgEmbed(text: string, settings: PluginSettings): boolean {
+  const extension = getUrlExtension(text);
+  if (extension && settings.imageExtensions) {
+    const allowedExtensions = settings.imageExtensions
+      .split(",")
+      .map((ext) => ext.trim().toLowerCase())
+      .filter((ext) => ext.length > 0);
+    if (allowedExtensions.includes(extension)) {
+      return true;
+    }
+  }
   const rules = regexCache.getImgEmbedRegexes(settings.listForImgEmbed);
   for (const reg of rules) {
     if (reg.test(text)) return true;

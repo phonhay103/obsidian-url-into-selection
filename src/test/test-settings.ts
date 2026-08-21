@@ -6,4 +6,5 @@ export const DEFAULT_SETTINGS: PluginSettings = {
       .source,
   nothingSelected: NothingSelected.doNothing,
   listForImgEmbed: "",
+  imageExtensions: "webp,png,jpg,jpeg,gif,svg,avif,ico,tiff",
 };

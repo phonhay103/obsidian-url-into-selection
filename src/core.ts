@@ -38,6 +38,8 @@ export default function UrlIntoSelection(
   )
     return;
 
+  if (typeof cb !== "string" && cb.defaultPrevented) return;
+
   if (typeof cb !== "string" && !cb.clipboardData) {
     console.error("empty clipboardData in ClipboardEvent");
     return;
@@ -51,10 +53,15 @@ export default function UrlIntoSelection(
     from: editor.getCursor(),
     to: editor.getCursor(),
   };
+  const hasOnlyUrls = (text: string) => {
+    if (text.trim() === "") return false;
+    const lines = text.split(/\r?\n/);
+    return lines.length > 0 && lines.every(l => l.trim() === "" || isUrl(l.trim(), settings));
+  };
   const isInMarkdownLink = checkIfInMarkdownLink(editor, cursorOrRange);
 
-  const clipboardIsUrl = isUrl(clipboardText.trim(), settings);
-  const selectedIsUrl = isUrl(selectedText.trim(), settings);
+  const clipboardIsUrl = hasOnlyUrls(clipboardText);
+  const selectedIsUrl = hasOnlyUrls(selectedText);
 
   if (!clipboardIsUrl && !selectedIsUrl) return;
 
@@ -87,39 +94,57 @@ export default function UrlIntoSelection(
     settings.nothingSelected === NothingSelected.insertTitle &&
     clipboardIsUrl
   ) {
-    const rawUrl = clipboardText.trim();
-    const processedUrl = processUrl(rawUrl);
-    const imgEmbedMark = isImgEmbed(rawUrl, settings) ? "!" : "";
-    const initialText = replaceText;
-    const effectiveReplaceRange = replaceRange || {
-      from: editor.getCursor(),
-      to: editor.getCursor(),
-    };
+    const urls = clipboardText.split(/\r?\n/).map(u => u.trim());
+    const needsFetch = urls.some(u => u !== "" && !isImgEmbed(u, settings) && !isWikilink(u));
 
-    return fetchTitle(processedUrl).then((title) => {
-      if (!title || title === processedUrl) return;
-      const newText = imgEmbedMark + `[${title}](${processedUrl})`;
+    if (needsFetch) {
+      const initialText = replaceText;
+      const effectiveReplaceRange = replaceRange || {
+        from: editor.getCursor(),
+        to: editor.getCursor(),
+      };
 
-      const line = effectiveReplaceRange.from.line;
-      const startCh = effectiveReplaceRange.from.ch;
-      const endCh = startCh + initialText.length;
+      return Promise.all(
+        urls.map(async (rawUrl) => {
+          if (rawUrl === "") return "";
+          if (isImgEmbed(rawUrl, settings) || isWikilink(rawUrl) || isInMarkdownLink) {
+            return getReplaceTextForSingleUrl(rawUrl, "", settings, isInMarkdownLink);
+          }
+          const processedUrl = processUrl(rawUrl);
+          const title = await fetchTitle(processedUrl);
+          if (!title || title === processedUrl) {
+            return `[${processedUrl}](${processedUrl})`;
+          }
+          return `[${title}](${processedUrl})`;
+        })
+      ).then((newLines) => {
+        const newText = newLines.join("\n");
+        if (newText === initialText) return;
 
-      let actualFrom = { line, ch: startCh };
-      let actualTo = { line, ch: endCh };
+        const line = effectiveReplaceRange.from.line;
+        const startCh = effectiveReplaceRange.from.ch;
 
-      if (editor.getRange(actualFrom, actualTo) !== initialText) {
-        const currentLineText = editor.getLine(line);
-        const idx = currentLineText.indexOf(initialText);
-        if (idx !== -1) {
-          actualFrom = { line, ch: idx };
-          actualTo = { line, ch: idx + initialText.length };
-        } else {
-          return;
+        const lines = initialText.split("\n");
+        const endLine = line + lines.length - 1;
+        const endCh = lines.length === 1 ? startCh + initialText.length : lines[lines.length - 1].length;
+
+        let actualFrom = { line, ch: startCh };
+        let actualTo = { line: endLine, ch: endCh };
+
+        if (editor.getRange(actualFrom, actualTo) !== initialText) {
+          if (lines.length === 1) {
+            const currentLineText = editor.getLine(line);
+            const idx = currentLineText.indexOf(initialText);
+            if (idx !== -1) {
+              actualFrom = { line, ch: idx };
+              actualTo = { line, ch: idx + initialText.length };
+            } else return;
+          } else return;
         }
-      }
 
-      editor.replaceRange(newText, actualFrom, actualTo);
-    });
+        editor.replaceRange(newText, actualFrom, actualTo);
+      });
+    }
   }
 }
 
@@ -132,12 +157,6 @@ function getSelnRange(editor: Editor, settings: PluginSettings) {
     replaceRange = null;
   } else {
     switch (settings.nothingSelected) {
-      case NothingSelected.autoSelect:
-        replaceRange = getWordBoundaries(editor, settings);
-        selectedText = editor.getRange(replaceRange.from, replaceRange.to);
-        break;
-      case NothingSelected.insertInline:
-      case NothingSelected.insertBare:
       case NothingSelected.insertTitle:
         replaceRange = getCursor(editor);
         selectedText = "";
@@ -168,18 +187,53 @@ function getReplaceText(
   settings: PluginSettings,
   isInMarkdownLink: boolean,
 ): string | null {
-  let linktext: string;
-  let url: string;
+  const hasOnlyUrls = (text: string) => {
+    if (text.trim() === "") return false;
+    const lines = text.split(/\r?\n/);
+    return lines.length > 0 && lines.every(l => l.trim() === "" || isUrl(l.trim(), settings));
+  };
 
-  if (isUrl(clipboardText.trim(), settings)) {
-    linktext = selectedText;
-    url = clipboardText.trim();
-  } else if (isUrl(selectedText.trim(), settings)) {
-    linktext = clipboardText;
-    url = selectedText.trim();
-  } else return null; // if neither of two is an URL, the following code would be skipped.
+  const cbIsUrls = hasOnlyUrls(clipboardText);
+  const selIsUrls = hasOnlyUrls(selectedText);
 
-  const imgEmbedMark = isImgEmbed(clipboardText.trim(), settings) ? "!" : "";
+  if (!cbIsUrls && !selIsUrls) return null;
+
+  const cbLines = clipboardText.split(/\r?\n/);
+  const selLines = selectedText.split(/\r?\n/);
+
+  if (cbIsUrls) {
+    if (selLines.length === cbLines.length) {
+      return cbLines.map((u, i) => getReplaceTextForSingleUrl(u.trim(), selLines[i], settings, isInMarkdownLink)).join("\n");
+    } else if (selectedText === "") {
+      return cbLines.map(u => getReplaceTextForSingleUrl(u.trim(), "", settings, isInMarkdownLink)).join("\n");
+    }
+  }
+
+  if (selIsUrls) {
+    if (selLines.length === cbLines.length) {
+      return selLines.map((u, i) => getReplaceTextForSingleUrl(u.trim(), cbLines[i], settings, isInMarkdownLink)).join("\n");
+    }
+  }
+
+  // Fallback if line counts don't match and selection is not empty:
+  if (cbIsUrls) {
+    return getReplaceTextForSingleUrl(clipboardText.trim(), selectedText, settings, isInMarkdownLink);
+  } else if (selIsUrls) {
+    return getReplaceTextForSingleUrl(selectedText.trim(), clipboardText, settings, isInMarkdownLink);
+  }
+
+  return null;
+}
+
+function getReplaceTextForSingleUrl(
+  url: string,
+  linktext: string,
+  settings: PluginSettings,
+  isInMarkdownLink: boolean,
+): string {
+  if (url === "") return linktext;
+
+  const imgEmbedMark = isImgEmbed(url, settings) ? "!" : "";
 
   // If we're inside markdown link parentheses, just return the URL without any wrapping
   if (isInMarkdownLink) {
@@ -188,12 +242,7 @@ function getReplaceText(
 
   // Handle Obsidian wikilinks
   if (isWikilink(url)) {
-    if (
-      selectedText === "" &&
-      settings.nothingSelected === NothingSelected.insertBare
-    ) {
-      return url; // Return bare wikilink
-    } else if (linktext === "") {
+    if (linktext === "") {
       return url; // No alias text, return bare wikilink
     } else {
       // Add alias to wikilink: [[link|alias]]
@@ -204,21 +253,14 @@ function getReplaceText(
 
   url = processUrl(url);
 
-  if (
-    selectedText === "" &&
-    settings.nothingSelected === NothingSelected.insertBare
-  ) {
-    return /^<.*>$/.test(url) ? url : `<${url}>`;
-  } else if (
-    selectedText === "" &&
-    settings.nothingSelected === NothingSelected.insertTitle
-  ) {
-    return imgEmbedMark + `[${url}](${url})`;
+  if (linktext === "") {
+    return imgEmbedMark === "!"
+      ? `![](${url})`
+      : imgEmbedMark + `[${url}](${url})`;
   } else {
     return imgEmbedMark + `[${linktext}](${url})`;
   }
 }
-
 function getCbText(cb: string | ClipboardEvent): string | null {
   let clipboardText: string;
 

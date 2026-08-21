@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
       .source,
   nothingSelected: NothingSelected.doNothing,
   listForImgEmbed: "",
+  imageExtensions: "webp,png,jpg,jpeg,gif,svg,avif,ico,tiff",
 };
 
 export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
@@ -36,16 +37,30 @@ export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
             }
           }),
       );
+
+    new Setting(containerEl)
+      .setName("Image Extensions")
+      .setDesc(
+        "Comma-separated list of file extensions that will be automatically treated as images."
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("e.g. webp, png, jpg, jpeg")
+          .setValue(plugin.settings.imageExtensions)
+          .onChange(async (value) => {
+            if (value.length > 0) {
+              plugin.settings.imageExtensions = value;
+              await plugin.saveSettings();
+            }
+          }),
+      );
     new Setting(containerEl)
       .setName("Behavior on pasting URL when nothing is selected")
-      .setDesc("Auto Select: Automatically select word surrounding the cursor.")
+      .setDesc("Configure what happens when you paste a URL with no text selected.")
       .addDropdown((dropdown) => {
         const options: Record<NothingSelected, string> = {
           0: "Do nothing",
-          1: "Auto Select",
-          2: "Insert [](url)",
-          3: "Insert <url>",
-          4: "Insert [title](url)",
+          4: "Smart insert",
         };
 
         dropdown
