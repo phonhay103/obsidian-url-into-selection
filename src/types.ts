@@ -1,8 +1,6 @@
 export const enum NothingSelected {
-  /** Default paste behaviour */
-  doNothing = 0,
-  /** Insert `[title](url)` by fetching title */
-  insertTitle = 4,
+  /** Default paste behaviour */ doNothing = 0,
+  /** Insert `[title](url)` by fetching title */ insertTitle = 4,
 }
 
 export interface PluginSettings {
@@ -10,4 +8,5 @@ export interface PluginSettings {
   nothingSelected: NothingSelected;
   listForImgEmbed: string;
   imageExtensions: string;
+  customRegex: string | null;
 }

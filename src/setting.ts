@@ -6,11 +6,10 @@ export { NothingSelected, PluginSettings } from "./types";
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   regex:
-    /^[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/
-      .source,
+    /^[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/ .source,
   nothingSelected: NothingSelected.doNothing,
   listForImgEmbed: "",
-  imageExtensions: "webp,png,jpg,jpeg,gif,svg,avif,ico,tiff",
+  imageExtensions: "webp,png,jpg,jpeg,gif,svg,avif,ico,tiff,bmp",
 };
 
 export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
@@ -24,26 +23,58 @@ export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Fallback Regular expression")
       .setDesc(
-        "Regular expression used to match URLs when default match fails.",
+        "Regular expression used to match URLs when default match fails. " +
+          "Leave empty to use the built-in URL pattern."
       )
-      .addText((text) =>
+      .addText((text) => {
         text
           .setPlaceholder("Enter regular expression here..")
           .setValue(plugin.settings.regex)
           .onChange(async (value) => {
             if (value.length > 0) {
-              plugin.settings.regex = value;
-              await plugin.saveSettings();
+              try {
+                new RegExp(value);
+                plugin.settings.regex = value;
+                await plugin.saveSettings();
+              } catch (error) {
+                console.warn("Invalid regex pattern:", error);
+                // Keep the old value
+              }
             }
-          }),
-      );
+          });
+        // Add preview functionality
+        text.inputEl.addEventListener("keyup", (e) => {
+          if (e.key === "Enter" && text.getValue().length > 0) {
+            try {
+              const regex = new RegExp(text.getValue());
+              // Test against common patterns
+              const testUrls = [
+                "https://example.com",
+                "ftp://files.example.com/file.txt",
+                "C:\\Users\documents\file.txt",
+                "just plain text",
+              ];
+              const results = testUrls.map(url => ({
+                url,
+                matches: regex.test(url),
+              }));
+              // Display preview in a temporary element
+              const previewEl = containerEl.createEl("div", { attr: { role: "status" }, text: JSON.stringify(results) });
+              setTimeout(() => previewEl.remove(), 3000);
+            } catch (error) {
+              // Invalid regex - already handled on change
+            }
+          }
+        });
+        return text;
+      });
 
     new Setting(containerEl)
       .setName("Image Extensions")
       .setDesc(
         "Comma-separated list of file extensions that will be automatically treated as images."
       )
-      .addText((text) =>
+      .addText((text) => {
         text
           .setPlaceholder("e.g. webp, png, jpg, jpeg")
           .setValue(plugin.settings.imageExtensions)
@@ -52,8 +83,9 @@ export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
               plugin.settings.imageExtensions = value;
               await plugin.saveSettings();
             }
-          }),
-      );
+          });
+      });
+
     new Setting(containerEl)
       .setName("Behavior on pasting URL when nothing is selected")
       .setDesc("Configure what happens when you paste a URL with no text selected.")
@@ -72,16 +104,17 @@ export class UrlIntoSelectionSettingsTab extends PluginSettingTab {
             this.display();
           });
       });
+
     new Setting(containerEl)
       .setName("Whitelist for image embed syntax")
       .setDesc(
         createFragment((el) => {
           el.appendText(
-            "![selection](url) will be used for URL that matches the following list.",
+            "![selection](url) will be used for URL that matches the following list."
           );
           el.createEl("br");
           el.appendText("Rules are regex-based, split by line break.");
-        }),
+        })
       )
       .addTextArea((text) => {
         text
