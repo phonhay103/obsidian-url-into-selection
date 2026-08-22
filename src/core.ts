@@ -1,5 +1,4 @@
-import assertNever from "assert-never";
-import { NothingSelected, PluginSettings } from "./types";
+import { PluginSettings, CursorPositionAfterPaste } from "./types";
 import { Editor, EditorPosition, EditorRange } from "obsidian";
 import { isUrl, processUrl, isImgEmbed, isWikilink } from "./utils/url";
 import { checkIfInMarkdownLink } from "./utils/markdown";
@@ -31,12 +30,12 @@ export default function UrlIntoSelection(
   cb: string | ClipboardEvent,
   settings: PluginSettings,
 ): void | Promise<void> {
-  // skip all if nothing should be done
-  if (
-    !editor.somethingSelected() &&
-    settings.nothingSelected === NothingSelected.doNothing
-  )
-    return;
+
+  if (editor.somethingSelected()) {
+    if (!settings.enableLinkWrapping) return;
+  } else {
+    if (!settings.enableTitleFetching) return;
+  }
 
   if (typeof cb !== "string" && cb.defaultPrevented) return;
 
@@ -48,7 +47,7 @@ export default function UrlIntoSelection(
   const clipboardText = getCbText(cb);
   if (clipboardText === null) return;
 
-  const { selectedText, replaceRange } = getSelnRange(editor, settings);
+  const { selectedText, replaceRange } = getSelnRange(editor);
   const cursorOrRange = replaceRange || {
     from: editor.getCursor(),
     to: editor.getCursor(),
@@ -76,26 +75,16 @@ export default function UrlIntoSelection(
   if (replaceText === null) return;
 
   // apply changes immediately
-  replace(editor, replaceText, replaceRange);
+  replace(editor, replaceText, replaceRange, settings);
 
+
+  // If nothing was selected, fetch title asynchronously and replace
   if (
     selectedText === "" &&
-    settings.nothingSelected === NothingSelected.insertInline
-  ) {
-    editor.setCursor({
-      ch: replaceRange.from.ch + 1,
-      line: replaceRange.from.line,
-    });
-  }
-
-  // If in insertTitle mode and nothing was selected, fetch title asynchronously and replace
-  if (
-    selectedText === "" &&
-    settings.nothingSelected === NothingSelected.insertTitle &&
     clipboardIsUrl
   ) {
     const urls = clipboardText.split(/\r?\n/).map(u => u.trim());
-    const needsFetch = urls.some(u => u !== "" && !isImgEmbed(u, settings) && !isWikilink(u));
+    const needsFetch = urls.some(u => u !== "" && !isImgEmbed(u, settings) && (!settings.enableWikilinks || !isWikilink(u)));
 
     if (needsFetch) {
       const initialText = replaceText;
@@ -107,7 +96,7 @@ export default function UrlIntoSelection(
       return Promise.all(
         urls.map(async (rawUrl) => {
           if (rawUrl === "") return "";
-          if (isImgEmbed(rawUrl, settings) || isWikilink(rawUrl) || isInMarkdownLink) {
+          if (isImgEmbed(rawUrl, settings) || (settings.enableWikilinks && isWikilink(rawUrl)) || isInMarkdownLink) {
             return getReplaceTextForSingleUrl(rawUrl, "", settings, isInMarkdownLink);
           }
           const processedUrl = processUrl(rawUrl);
@@ -143,12 +132,22 @@ export default function UrlIntoSelection(
         }
 
         editor.replaceRange(newText, actualFrom, actualTo);
+        if (settings.cursorPositionAfterPaste === CursorPositionAfterPaste.Start) {
+          editor.setCursor(actualFrom);
+        } else {
+          const newTextLines = newText.split("\n");
+          const endPos = {
+            line: actualFrom.line + newTextLines.length - 1,
+            ch: (newTextLines.length === 1 ? actualFrom.ch : 0) + newTextLines[newTextLines.length - 1].length,
+          };
+          editor.setCursor(endPos);
+        }
       });
     }
   }
 }
 
-function getSelnRange(editor: Editor, settings: PluginSettings) {
+function getSelnRange(editor: Editor) {
   let selectedText: string;
   let replaceRange: EditorRange | null;
 
@@ -156,16 +155,8 @@ function getSelnRange(editor: Editor, settings: PluginSettings) {
     selectedText = editor.getSelection();
     replaceRange = null;
   } else {
-    switch (settings.nothingSelected) {
-      case NothingSelected.insertTitle:
-        replaceRange = getCursor(editor);
-        selectedText = "";
-        break;
-      case NothingSelected.doNothing:
-        throw new Error("should be skipped");
-      default:
-        assertNever(settings.nothingSelected);
-    }
+    replaceRange = getCursor(editor);
+    selectedText = "";
   }
   return { selectedText, replaceRange };
 }
@@ -241,7 +232,7 @@ function getReplaceTextForSingleUrl(
   }
 
   // Handle Obsidian wikilinks
-  if (isWikilink(url)) {
+  if (settings.enableWikilinks && isWikilink(url)) {
     if (linktext === "") {
       return url; // No alias text, return bare wikilink
     } else {
@@ -349,13 +340,27 @@ function replace(
   editor: Editor,
   replaceText: string,
   replaceRange: EditorRange | null = null,
+  settings: PluginSettings,
 ): void {
+  const startPos = replaceRange ? replaceRange.from : editor.getCursor("from");
+
   // replaceRange is only not null when there isn't anything selected.
   if (replaceRange && replaceRange.from && replaceRange.to) {
     editor.replaceRange(replaceText, replaceRange.from, replaceRange.to);
   }
   // if word is null or undefined
   else editor.replaceSelection(replaceText);
+
+  if (settings.cursorPositionAfterPaste === CursorPositionAfterPaste.Start) {
+    editor.setCursor(startPos);
+  } else {
+    const lines = replaceText.split("\n");
+    const endPos = {
+      line: startPos.line + lines.length - 1,
+      ch: (lines.length === 1 ? startPos.ch : 0) + lines[lines.length - 1].length,
+    };
+    editor.setCursor(endPos);
+  }
 }
 
 // Export internal functions for testing

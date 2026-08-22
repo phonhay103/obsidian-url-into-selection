@@ -56,7 +56,13 @@ export class Editor {
   }
 
   // Cursor Operations
-  getCursor(): EditorPosition {
+  getCursor(type?: 'from' | 'to' | 'head' | 'anchor'): EditorPosition {
+    if (type === 'from' || type === 'anchor') {
+      return this.selection ? this.selection.from : this.cursor;
+    }
+    if (type === 'to' || type === 'head') {
+      return this.selection ? this.selection.to : this.cursor;
+    }
     return this.cursor;
   }
 

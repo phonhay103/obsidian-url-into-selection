@@ -15,9 +15,9 @@ Custom plugins are only available for Obsidian v0.9.8+.
 ## Settings
 
 - **Image Extensions**: Provide a comma-separated list of image extensions (e.g. `webp,png,jpg,jpeg,gif`). When pasting a matching image URL, it will be automatically inserted as an image embed (`![](url)`).
-- **When nothing is selected**:
-  - **Do nothing**: The URL is simply pasted as normal text.
-  - **Smart insert**: When pasting a normal URL, the plugin will fetch the webpage title and automatically insert a Markdown link (`[title](url)`). If the URL is an image, it will format it as an image embed (`![](url)`).
+- **When nothing is selected**: The plugin will automatically format the pasted URL:
+  - If pasting a normal URL, it will fetch the webpage title and automatically insert a Markdown link (`[title](url)`).
+  - If the URL is an image (based on defined image extensions), it will format it as an image embed (`![](url)`).
 
 ## Paste as Plain Text
 

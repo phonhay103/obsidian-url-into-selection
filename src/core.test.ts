@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Editor, setRequestUrlMock } from "./test/obsidian-mock";
 import UrlIntoSelection from "./core";
-import { NothingSelected, PluginSettings } from "./types";
-import { DEFAULT_SETTINGS } from "./test/test-settings";
+import { PluginSettings, CursorPositionAfterPaste } from "./types";
+import { TEST_SETTINGS } from "./test/test-settings";
 
 // Expose internal functions for testing by importing them differently
 // We'll need to restructure the core module to export these functions
@@ -13,8 +13,7 @@ describe("URL into Selection - Markdown Link Context", () => {
 
   beforeEach(() => {
     settings = {
-      ...DEFAULT_SETTINGS,
-      nothingSelected: NothingSelected.insertTitle,
+      ...TEST_SETTINGS,
     };
   });
 
@@ -175,7 +174,7 @@ describe("URL Detection Logic (isUrl function)", () => {
   let settings: PluginSettings;
 
   beforeEach(() => {
-    settings = { ...DEFAULT_SETTINGS };
+    settings = { ...TEST_SETTINGS };
   });
 
   describe("Valid URLs", () => {
@@ -299,7 +298,7 @@ describe("URL Detection Logic (isUrl function)", () => {
   describe("Custom Regex Fallback", () => {
     it("should use custom regex when URL constructor fails", () => {
       const customSettings = {
-        ...DEFAULT_SETTINGS,
+        ...TEST_SETTINGS,
         regex: "example\\.(com|org)",
       };
       const editor = new Editor("link", { line: 0, ch: 0 });
@@ -317,8 +316,7 @@ describe("DevonThink Links", () => {
 
   beforeEach(() => {
     settings = {
-      ...DEFAULT_SETTINGS,
-      nothingSelected: NothingSelected.insertTitle,
+      ...TEST_SETTINGS,
     };
   });
 
@@ -330,7 +328,7 @@ describe("DevonThink Links", () => {
     expect(editor.getValue()).toBe("[selected text](x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9)");
   });
 
-  it("should create link when pasting DevonThink URL with no selection in insertTitle mode", () => {
+  it("should create link when pasting DevonThink URL with no selection", () => {
     editor = new Editor("", { line: 0, ch: 0 });
 
     UrlIntoSelection(editor, "x-devonthink-item://7EA8D8EE-BC00-42F2-95FA-3872D0042FF9", settings);
@@ -338,85 +336,56 @@ describe("DevonThink Links", () => {
   });
 });
 
-describe("NothingSelected Behaviors", () => {
+describe("Pasting URL when nothing is selected", () => {
   let editor: Editor;
 
-  describe("doNothing mode", () => {
-    it("should skip processing when nothing is selected", () => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.doNothing,
-      };
-      editor = new Editor("some text", { line: 0, ch: 4 });
-
-      UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe("some text"); // No change
-    });
+  beforeEach(() => {
+    setRequestUrlMock(null);
   });
 
+  afterEach(() => {
+    setRequestUrlMock(null);
+  });
 
-  describe("insertTitle mode", () => {
-    beforeEach(() => {
-      setRequestUrlMock(null);
-    });
-
-    afterEach(() => {
-      setRequestUrlMock(null);
-    });
-
-    it("should fetch title and create [title](url) format when nothing is selected", async () => {
-      setRequestUrlMock(async (req) => {
-        return {
-          status: 200,
-          text: "<html><head><title>My Web Page</title></head></html>",
-        };
-      });
-
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.insertTitle,
+  it("should fetch title and create [title](url) format when nothing is selected", async () => {
+    setRequestUrlMock(async (req) => {
+      return {
+        status: 200,
+        text: "<html><head><title>My Web Page</title></head></html>",
       };
-      editor = new Editor("", { line: 0, ch: 0 });
-
-      await UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe("[My Web Page](https://example.com)");
     });
 
-    it("should fallback to url as title when title fetch fails", async () => {
-      setRequestUrlMock(async () => {
-        throw new Error("Network error");
-      });
+    editor = new Editor("", { line: 0, ch: 0 });
 
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.insertTitle,
-      };
-      editor = new Editor("", { line: 0, ch: 0 });
+    await UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
+    expect(editor.getValue()).toBe("[My Web Page](https://example.com)");
+  });
 
-      await UrlIntoSelection(editor, "https://example.com", settings);
-      expect(editor.getValue()).toBe(
-        "[https://example.com](https://example.com)",
-      );
+  it("should fallback to url as title when title fetch fails", async () => {
+    setRequestUrlMock(async () => {
+      throw new Error("Network error");
     });
 
+    editor = new Editor("", { line: 0, ch: 0 });
 
-    it("should format image URLs (like .webp) as ![](url) without fetching title in insertTitle mode", async () => {
-      let fetchCalled = false;
-      setRequestUrlMock(async () => {
-        fetchCalled = true;
-        return { status: 200, text: "<html><head><title>Some Title</title></head></html>" };
-      });
+    await UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
+    expect(editor.getValue()).toBe(
+      "[https://example.com](https://example.com)",
+    );
+  });
 
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        nothingSelected: NothingSelected.insertTitle,
-      };
-      editor = new Editor("", { line: 0, ch: 0 });
-
-      await UrlIntoSelection(editor, "https://example.com/image.webp", settings);
-      expect(editor.getValue()).toBe("![](https://example.com/image.webp)");
-      expect(fetchCalled).toBe(false);
+  it("should format image URLs (like .webp) as ![](url) without fetching title", async () => {
+    let fetchCalled = false;
+    setRequestUrlMock(async () => {
+      fetchCalled = true;
+      return { status: 200, text: "<html><head><title>Some Title</title></head></html>" };
     });
+
+    editor = new Editor("", { line: 0, ch: 0 });
+
+    await UrlIntoSelection(editor, "https://example.com/image.webp", TEST_SETTINGS);
+    expect(editor.getValue()).toBe("![](https://example.com/image.webp)");
+    expect(fetchCalled).toBe(false);
   });
 });
 
@@ -426,7 +395,7 @@ describe("Image Embed Detection (isImgEmbed function)", () => {
   describe("Image file extensions", () => {
     it("should detect common image extensions", () => {
       const settings = {
-        ...DEFAULT_SETTINGS,
+        ...TEST_SETTINGS,
         listForImgEmbed: "\\.(jpg|jpeg|png|gif|bmp|svg|webp)$",
       };
       editor = new Editor("image", { line: 0, ch: 0 });
@@ -440,7 +409,7 @@ describe("Image Embed Detection (isImgEmbed function)", () => {
   describe("Video/YouTube patterns", () => {
     it("should detect YouTube URLs", () => {
       const settings = {
-        ...DEFAULT_SETTINGS,
+        ...TEST_SETTINGS,
         listForImgEmbed: "youtube\\.com|youtu\\.be",
       };
       editor = new Editor("video", { line: 0, ch: 0 });
@@ -456,7 +425,7 @@ describe("Image Embed Detection (isImgEmbed function)", () => {
   describe("Multiple regex patterns", () => {
     it("should handle multiple rules separated by newlines", () => {
       const settings = {
-        ...DEFAULT_SETTINGS,
+        ...TEST_SETTINGS,
         listForImgEmbed: "\\.(jpg|png)$\nyoutube\\.com\nvimeo\\.com",
       };
       editor = new Editor("media", { line: 0, ch: 0 });
@@ -481,7 +450,7 @@ describe("File Path Processing (processUrl function)", () => {
       UrlIntoSelection(
         editor,
         "https://example.com/path with spaces",
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[link](<https://example.com/path with spaces>)",
@@ -489,24 +458,24 @@ describe("File Path Processing (processUrl function)", () => {
     });
 
     it("should wrap URLs with parentheses in angle brackets", () => {
-      UrlIntoSelection(editor, "https://example.com/page(1)", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "https://example.com/page(1)", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[link](<https://example.com/page(1)>)");
     });
 
     it("should encode angle brackets in URLs", () => {
-      UrlIntoSelection(editor, "https://example.com/<path>", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "https://example.com/<path>", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[link](https://example.com/%3Cpath%3E)");
     });
   });
 
   describe("File URL conversion", () => {
     it("should convert Windows paths to file URLs", () => {
-      UrlIntoSelection(editor, "C:\\path\\file.txt", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "C:\\path\\file.txt", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[link](file:///C:/path/file.txt)");
     });
 
     it("should convert Unix paths to file URLs", () => {
-      UrlIntoSelection(editor, "/home/user/file.txt", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "/home/user/file.txt", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[link](file:///home/user/file.txt)");
     });
   });
@@ -517,7 +486,7 @@ describe("Selection Whitespace Preservation", () => {
     const editor = new Editor("  spaced text  ", { line: 0, ch: 0 });
     editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 15 }); // Select including spaces
 
-    UrlIntoSelection(editor, "https://example.com", DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
     expect(editor.getValue()).toBe("[  spaced text  ](https://example.com)");
   });
 
@@ -525,7 +494,7 @@ describe("Selection Whitespace Preservation", () => {
     const editor = new Editor("\ttext ", { line: 0, ch: 0 });
     editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 6 }); // Select tab and trailing space
 
-    UrlIntoSelection(editor, "https://example.com", DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
     expect(editor.getValue()).toBe("[\ttext ](https://example.com)");
   });
 });
@@ -536,7 +505,7 @@ describe("Bidirectional URL/Text Swapping", () => {
       const editor = new Editor("https://example.com", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 19 }); // Select full URL
 
-      UrlIntoSelection(editor, "Example Website", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "Example Website", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[Example Website](https://example.com)");
     });
 
@@ -544,7 +513,7 @@ describe("Bidirectional URL/Text Swapping", () => {
       const editor = new Editor("https://example.com", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 19 }); // Select full URL
 
-      UrlIntoSelection(editor, "  Trimmed Title  ", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "  Trimmed Title  ", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[Trimmed Title](https://example.com)");
     });
   });
@@ -554,7 +523,7 @@ describe("Bidirectional URL/Text Swapping", () => {
       const editor = new Editor("My Website", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 10 });
 
-      UrlIntoSelection(editor, "https://example.com", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[My Website](https://example.com)");
     });
   });
@@ -564,7 +533,7 @@ describe("Bidirectional URL/Text Swapping", () => {
       const editor = new Editor("plain text", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 10 });
 
-      UrlIntoSelection(editor, "more plain text", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "more plain text", TEST_SETTINGS);
       expect(editor.getValue()).toBe("plain text"); // No change
     });
   });
@@ -580,7 +549,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         '"V:\\2022 Trading Calendar.xlsx"',
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[some text](file:///V:/2022%20Trading%20Calendar.xlsx)",
@@ -594,7 +563,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         '"C:\\Program Files\\My App\\file.txt"',
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[document](file:///C:/Program%20Files/My%20App/file.txt)",
@@ -608,7 +577,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         '"C:\\Users\\Documents\\file.txt"',
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[file](file:///C:/Users/Documents/file.txt)",
@@ -625,7 +594,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         "'/Users/name/Documents/My File.txt'",
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[document](file:///Users/name/Documents/My%20File.txt)",
@@ -639,7 +608,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         "'/home/user/documents/file.txt'",
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[file](file:///home/user/documents/file.txt)",
@@ -655,7 +624,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         '"https://example.com/page with spaces"',
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         "[link](<https://example.com/page with spaces>)",
@@ -666,7 +635,7 @@ describe("Quote Stripping for File Paths", () => {
       const editor = new Editor("website", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 7 });
 
-      UrlIntoSelection(editor, "'https://example.com/path'", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "'https://example.com/path'", TEST_SETTINGS);
       expect(editor.getValue()).toBe("[website](https://example.com/path)");
     });
   });
@@ -677,7 +646,7 @@ describe("Quote Stripping for File Paths", () => {
       const editor = new Editor("text", { line: 0, ch: 0 });
       editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 4 });
 
-      UrlIntoSelection(editor, 'https://example.com"', DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, 'https://example.com"', TEST_SETTINGS);
       expect(editor.getValue()).toBe('[text](https://example.com")');
     });
 
@@ -686,7 +655,7 @@ describe("Quote Stripping for File Paths", () => {
       const editor = new Editor("text", { line: 0, ch: 0 });
       const originalValue = editor.getValue();
 
-      UrlIntoSelection(editor, '""', DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, '""', TEST_SETTINGS);
       expect(editor.getValue()).toBe(originalValue); // No change, empty string is not a valid URL
     });
 
@@ -694,7 +663,7 @@ describe("Quote Stripping for File Paths", () => {
       const editor = new Editor("text", { line: 0, ch: 0 });
       const originalValue = editor.getValue();
 
-      UrlIntoSelection(editor, '"', DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, '"', TEST_SETTINGS);
       expect(editor.getValue()).toBe(originalValue); // No change, too short
     });
 
@@ -702,7 +671,7 @@ describe("Quote Stripping for File Paths", () => {
       const editor = new Editor("text", { line: 0, ch: 0 });
       const originalValue = editor.getValue();
 
-      UrlIntoSelection(editor, "''", DEFAULT_SETTINGS);
+      UrlIntoSelection(editor, "''", TEST_SETTINGS);
       expect(editor.getValue()).toBe(originalValue); // No change, empty after stripping
     });
 
@@ -714,7 +683,7 @@ describe("Quote Stripping for File Paths", () => {
       UrlIntoSelection(
         editor,
         'https://example.com/search?q="quoted text"&other=value',
-        DEFAULT_SETTINGS,
+        TEST_SETTINGS,
       );
       expect(editor.getValue()).toBe(
         '[query](<https://example.com/search?q="quoted text"&other=value>)',
@@ -729,7 +698,7 @@ describe("Obsidian Wikilink Support", () => {
 
   beforeEach(() => {
     editor = new Editor("", { line: 0, ch: 0 });
-    settings = { ...DEFAULT_SETTINGS };
+    settings = { ...TEST_SETTINGS };
   });
 
   describe("when pasting wikilinks with selected text", () => {
@@ -780,7 +749,7 @@ describe("Clipboard Event Handling", () => {
     const editor = new Editor("text", { line: 0, ch: 0 });
     editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 4 });
 
-    UrlIntoSelection(editor, "https://example.com", DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, "https://example.com", TEST_SETTINGS);
     expect(editor.getValue()).toBe("[text](https://example.com)");
   });
 
@@ -792,7 +761,7 @@ describe("Clipboard Event Handling", () => {
       clipboardData: undefined,
     } as unknown as ClipboardEvent;
 
-    UrlIntoSelection(editor, mockClipboardEvent, DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, mockClipboardEvent, TEST_SETTINGS);
     expect(editor.getValue()).toBe(originalValue); // No change
   });
 
@@ -808,7 +777,7 @@ describe("Clipboard Event Handling", () => {
       preventDefault: () => {},
     } as unknown as ClipboardEvent;
 
-    UrlIntoSelection(editor, mockClipboardEvent, DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, mockClipboardEvent, TEST_SETTINGS);
     expect(editor.getValue()).toBe("[text](https://example.com)");
   });
 
@@ -820,7 +789,7 @@ describe("Clipboard Event Handling", () => {
       clipboardData: null,
     } as unknown as ClipboardEvent;
 
-    UrlIntoSelection(editor, mockClipboardEvent, DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, mockClipboardEvent, TEST_SETTINGS);
     expect(editor.getValue()).toBe(originalValue); // No change
   });
 
@@ -835,7 +804,7 @@ describe("Clipboard Event Handling", () => {
       preventDefault: () => {},
     } as unknown as ClipboardEvent;
 
-    UrlIntoSelection(editor, mockClipboardEvent, DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, mockClipboardEvent, TEST_SETTINGS);
     expect(editor.getValue()).toBe("[text](https://example.com)");
   });
 
@@ -850,7 +819,83 @@ describe("Clipboard Event Handling", () => {
       preventDefault: () => {},
     } as unknown as ClipboardEvent;
 
-    UrlIntoSelection(editor, mockClipboardEvent, DEFAULT_SETTINGS);
+    UrlIntoSelection(editor, mockClipboardEvent, TEST_SETTINGS);
     expect(editor.getValue()).toBe("[text](https://example.com)");
+  });
+
+  describe("Cursor position after paste", () => {
+    it("should position the cursor at the end of the replaced selection", () => {
+      const editor = new Editor("click here to search", { line: 0, ch: 6 });
+      editor.setSelection({ line: 0, ch: 6 }, { line: 0, ch: 10 });
+      const clipboardText = "https://example.com";
+
+      UrlIntoSelection(editor, clipboardText, TEST_SETTINGS);
+
+      expect(editor.getValue()).toBe("click [here](https://example.com) to search");
+      // The cursor should be right after the pasted Markdown link: "click [here](https://example.com)"
+      // "click " is 6 chars. "[here](https://example.com)" is 28 chars. 6 + 28 = 34.
+      expect(editor.getCursor()).toEqual({ line: 0, ch: 33 });
+    });
+
+    it("should position the cursor at the end of the asynchronously fetched title link when nothing was selected", async () => {
+      const editor = new Editor("See ", { line: 0, ch: 4 });
+      const clipboardText = "https://example.com";
+      const settings = TEST_SETTINGS;
+
+      // Mock successful fetchTitle returning "Example Title"
+      setRequestUrlMock(async () => ({
+        status: 200,
+        headers: { "content-type": "text/html" },
+        text: "<html><head><title>Example Title</title></head></html>",
+      } as any));
+
+      const promise = UrlIntoSelection(editor, clipboardText, settings);
+      expect(promise).toBeInstanceOf(Promise);
+      await promise;
+
+      expect(editor.getValue()).toBe("See [Example Title](https://example.com)");
+      expect(editor.getCursor()).toEqual({ line: 0, ch: 40 });
+    });
+
+
+    it("should position the cursor at the start of the replaced selection when cursorPositionAfterPaste is set to Start", () => {
+      const editor = new Editor("click here to search", { line: 0, ch: 6 });
+      editor.setSelection({ line: 0, ch: 6 }, { line: 0, ch: 10 });
+      const clipboardText = "https://example.com";
+      const settings = {
+        ...TEST_SETTINGS,
+        cursorPositionAfterPaste: CursorPositionAfterPaste.Start,
+      };
+
+      UrlIntoSelection(editor, clipboardText, settings);
+
+      expect(editor.getValue()).toBe("click [here](https://example.com) to search");
+      // The cursor should be at the start of the pasted Markdown link: index 6
+      expect(editor.getCursor()).toEqual({ line: 0, ch: 6 });
+    });
+
+    it("should position the cursor at the start of the asynchronously fetched title link when cursorPositionAfterPaste is set to Start", async () => {
+      const editor = new Editor("See ", { line: 0, ch: 4 });
+      const clipboardText = "https://example.com";
+      const settings = {
+        ...TEST_SETTINGS,
+        cursorPositionAfterPaste: CursorPositionAfterPaste.Start,
+      };
+
+      // Mock successful fetchTitle returning "Example Title"
+      setRequestUrlMock(async () => ({
+        status: 200,
+        headers: { "content-type": "text/html" },
+        text: "<html><head><title>Example Title</title></head></html>",
+      } as any));
+
+      const promise = UrlIntoSelection(editor, clipboardText, settings);
+      expect(promise).toBeInstanceOf(Promise);
+      await promise;
+
+      expect(editor.getValue()).toBe("See [Example Title](https://example.com)");
+      // The cursor should be at the start of the link: index 4
+      expect(editor.getCursor()).toEqual({ line: 0, ch: 4 });
+    });
   });
 });

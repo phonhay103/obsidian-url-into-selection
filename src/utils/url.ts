@@ -60,7 +60,7 @@ export function isUrl(text: string, settings: PluginSettings): boolean {
   if (text === "") return false;
 
   // Check for Obsidian wikilink format [[...]]
-  if (isWikilink(text)) return true;
+  if (settings.enableWikilinks && isWikilink(text)) return true;
 
   try {
     // throw TypeError: Invalid URL if not valid
@@ -159,6 +159,7 @@ export function getUrlExtension(urlText: string): string | null {
  * Check if URL matches image embed patterns
  */
 export function isImgEmbed(text: string, settings: PluginSettings): boolean {
+  if (!settings.enableImageEmbed) return false;
   const extension = getUrlExtension(text);
   if (extension && settings.imageExtensions) {
     const allowedExtensions = settings.imageExtensions
