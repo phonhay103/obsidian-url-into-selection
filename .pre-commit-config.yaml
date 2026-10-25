@@ -1,6 +1,6 @@
-# A TypeScript Obsidian plugin built with esbuild. It has no lint script, and
-# `tsc --noEmit` currently fails (4 findings in src/setting.ts, src/test/,
-# src/utils/title.ts), so typechecking is not a hook until the tree is clean.
+# A TypeScript Obsidian plugin built with esbuild. It has no lint script, so
+# the hook is `tsc --noEmit` directly; the build stays out because esbuild
+# rewrites main.js and the repo tracks that bundle.
 # One-time setup per clone:  pre-commit install
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -14,6 +14,15 @@ repos:
         # main.js is the built bundle and is tracked (Obsidian loads it).
         args: ["--maxkb=2048"]
       - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: typecheck
+        name: typecheck (tsc --noEmit)
+        entry: npx tsc --noEmit
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
 
   # The hook builds gitleaks with the Go toolchain on first run, so Go must be
   # on PATH; the built binary is cached afterwards. Only the staged diff is

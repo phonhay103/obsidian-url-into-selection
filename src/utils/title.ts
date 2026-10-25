@@ -83,7 +83,7 @@ export function fetchTitle(url: string): Promise<string | null> {
         }
         return null;
       })
-      .catch((err) => {
+      .catch((err: unknown): null => {
         console.error("Failed to fetch title for URL:", url, err);
         return null;
       });
@@ -91,7 +91,7 @@ export function fetchTitle(url: string): Promise<string | null> {
     return fetch(targetUrl, { headers })
       .then((res) => res.text())
       .then((html) => extractTitle(html))
-      .catch((err) => {
+      .catch((err: unknown): null => {
         console.error("Failed to fetch title for URL:", url, err);
         return null;
       });
