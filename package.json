@@ -14,7 +14,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@vitest/ui": "^3.2.4",
+    "@vitest/ui": "^5.0.5",
     "assert-never": "^1.2.1",
     "commitizen": "^4.2.3",
     "cz-conventional-changelog": "^3.3.0",
@@ -27,7 +27,7 @@
     "tslib": "^2.0.3",
     "typescript": "^5.8.3",
     "url-parse": "^1.5.1",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.5"
   },
   "config": {
     "commitizen": {
