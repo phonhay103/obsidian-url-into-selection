@@ -21,7 +21,7 @@
     "esbuild": "^0.25.8",
     "file-url": "^4.0.0",
     "jsdom": "^26.1.0",
-    "obsidian": "^1.8.7",
+    "obsidian": "^1.14.4",
     "prettier": "^3.6.2",
     "standard-version": "^9.0.0",
     "tslib": "^2.0.3",
